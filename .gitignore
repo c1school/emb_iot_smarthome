@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+ngrok
+FETCH_HEAD
+venv/
+.lgd-nfy0
