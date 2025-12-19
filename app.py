@@ -1,22 +1,27 @@
 import time
 import threading
 import psutil
+import json
+import re
 from flask import Flask, render_template, jsonify, request
 from gpiozero import OutputDevice
 import board
 import adafruit_dht
-import speech_recognition as sr
-from ctypes import *
 
-# --- [1. ALSA 에러 메시지 숨기기] ---
-ERROR_HANDLER_FUNC = CFUNCTYPE(None, c_char_p, c_int, c_char_p, c_int, c_char_p)
-def py_error_handler(filename, line, function, err, fmt):
-    pass
-c_error_handler = ERROR_HANDLER_FUNC(py_error_handler)
-asound = cdll.LoadLibrary('libasound.so')
-asound.snd_lib_error_set_handler(c_error_handler)
+# [NEW] 구글 제미나이 라이브러리
+import google.generativeai as genai
 
-# --- [2. GPIO Busy 에러 방지] ---
+# ========================================================
+# 🔑 [필수] 발급받은 Gemini API 키를 여기에 넣으세요!
+# ========================================================
+API_KEY = "API 키 삽입" 
+# ========================================================
+
+# Gemini 설정
+genai.configure(api_key=API_KEY)
+model = genai.GenerativeModel('gemini-2.5-flash-lite') # 빠르고 가벼운 모델 사용
+
+# --- [1. GPIO 정리] ---
 for proc in psutil.process_iter(['pid', 'name']):
     if proc.info['name'] and "libgpiod" in proc.info['name']:
         try:
@@ -24,42 +29,129 @@ for proc in psutil.process_iter(['pid', 'name']):
         except:
             pass
 
-# --- [3. 핀 번호 설정] ---
-DHT_PIN = board.D17       # 온습도 센서
-FAN_PIN = 22              # 에어컨 (파란 LED)
-HEATER_PIN = 27           # 난방기 (빨간 LED)
-LAMP_PIN = 26             # 전등 (노란 LED)
-HUMIDIFIER_PIN = 23       # 가습기 (초록 LED)
+# --- [2. 핀 번호 설정] ---
+DHT_PIN = board.D17
+FAN_PIN = 22
+HEATER_PIN = 27
+LAMP_PIN = 26
+HUMIDIFIER_PIN = 23
 
-TARGET_TEMP = 26.0        # 희망 온도
-TARGET_HUMID = 50.0       # 희망 습도
+TARGET_TEMP = 26.0
+TARGET_HUMID = 50.0
 
-# --- [4. 기기 초기화] ---
+# --- [3. 기기 초기화] ---
 app = Flask(__name__)
 
-# LED(가전제품) 설정
 fan = OutputDevice(FAN_PIN, active_high=True, initial_value=False)
 heater = OutputDevice(HEATER_PIN, active_high=True, initial_value=False)
 lamp = OutputDevice(LAMP_PIN, active_high=True, initial_value=False)
 humidifier = OutputDevice(HUMIDIFIER_PIN, active_high=True, initial_value=False)
 
-# 온습도 센서 설정
 try:
     dht_device = adafruit_dht.DHT11(DHT_PIN, use_pulseio=False)
 except:
     dht_device = None
 
-# 상태 저장소
-current_data = {
-    "temp": 0, "humid": 0, "mode": "AUTO"
-}
+current_data = {"temp": 0, "humid": 0, "mode": "AUTO"}
 
-# --- [5. 자동화 로직 (스레드 1) - 주기 완화] ---
+# ==========================================
+# 🧠 [핵심] Gemini에게 제어 명령 받기
+# ==========================================
+def ask_gemini(user_text):
+    """
+    사용자의 말을 Gemini에게 보내고, 제어 명령(JSON)을 받아옵니다.
+    """
+    
+    # 1. 시스템 프롬프트 (가스라이팅)
+    system_prompt = f"""
+    너는 라즈베리파이 스마트홈 AI 비서야.
+    현재 실내 온도는 {current_data['temp']}도, 습도는 {current_data['humid']}%야.
+    
+    사용자의 말을 듣고 다음 **JSON 형식**으로만 정확하게 답변해.
+    마크다운(```json)이나 다른 설명은 절대 붙이지 마. 오직 순수 JSON만 줘.
+    
+    {{
+        "action": "제어명령",
+        "msg": "사용자에게 할 친절한 답변"
+    }}
+
+    [제어명령 목록]
+    - 전등 켜기: LAMP_ON
+    - 전등 끄기: LAMP_OFF
+    - 에어컨 켜기: FAN_ON
+    - 에어컨 끄기: FAN_OFF
+    - 난방기 켜기: HEAT_ON
+    - 난방기 끄기: HEAT_OFF
+    - 가습기 켜기: HUM_ON
+    - 가습기 끄기: HUM_OFF
+    - 자동모드: AUTO_MODE
+    - 수동모드: MANUAL_MODE
+    - 제어 없음: NONE (그냥 대화할 때)
+
+    예시: "불 켜줘" -> {{"action": "LAMP_ON", "msg": "네, 전등을 켜드릴게요!"}}
+    """
+
+    try:
+        # 2. Gemini에게 질문
+        full_prompt = f"{system_prompt}\n\n사용자: {user_text}"
+        response = model.generate_content(full_prompt)
+        
+        # 3. 응답 파싱 (Gemini가 가끔 ```json ... ``` 을 붙일 때가 있어서 제거)
+        clean_text = response.text.strip()
+        # 마크다운 코드 블록 제거 정규식
+        clean_text = re.sub(r"^```json\s*", "", clean_text)
+        clean_text = re.sub(r"^```\s*", "", clean_text)
+        clean_text = re.sub(r"\s*```$", "", clean_text)
+        
+        ai_data = json.loads(clean_text)
+        return ai_data
+
+    except Exception as e:
+        print(f"Gemini 오류: {e}")
+        # 오류 발생 시 기본값 리턴
+        return {"action": "NONE", "msg": "죄송해요, AI 서버와 통신이 원활하지 않아요. 😅"}
+
+# --- [제어 로직] ---
+def process_ai_command(ai_data):
+    action = ai_data.get("action", "NONE")
+    msg = ai_data.get("msg", "")
+
+    print(f"🤖 Gemini 판단: {action} / 답변: {msg}")
+
+    if action == "LAMP_ON": lamp.on()
+    elif action == "LAMP_OFF": lamp.off()
+    
+    elif action == "FAN_ON":
+        current_data["mode"] = "MANUAL"
+        fan.on(); heater.off()
+    elif action == "FAN_OFF":
+        current_data["mode"] = "MANUAL"
+        fan.off()
+        
+    elif action == "HEAT_ON":
+        current_data["mode"] = "MANUAL"
+        heater.on(); fan.off()
+    elif action == "HEAT_OFF":
+        current_data["mode"] = "MANUAL"
+        heater.off()
+        
+    elif action == "HUM_ON":
+        current_data["mode"] = "MANUAL"
+        humidifier.on()
+    elif action == "HUM_OFF":
+        current_data["mode"] = "MANUAL"
+        humidifier.off()
+        
+    elif action == "AUTO_MODE": current_data["mode"] = "AUTO"
+    elif action == "MANUAL_MODE": current_data["mode"] = "MANUAL"
+
+    return msg
+
+# --- [자동화 루프] ---
 def automation_loop():
     print("🤖 스마트홈 자동화 시스템 가동 중...")
     while True:
         try:
-            # 센서 읽기
             if dht_device:
                 try:
                     t = dht_device.temperature
@@ -70,13 +162,10 @@ def automation_loop():
                 except RuntimeError:
                     pass
             
-            # [자동 제어 로직]
             if current_data["mode"] == "AUTO":
                 curr_t = current_data["temp"]
                 curr_h = current_data["humid"]
-                
                 if curr_t != 0: 
-                    # 1. 온도 제어
                     if curr_t > TARGET_TEMP + 1.0: 
                         if not fan.value: fan.on(); heater.off()
                     elif curr_t < TARGET_TEMP - 1.0: 
@@ -84,96 +173,17 @@ def automation_loop():
                     else: 
                         if fan.value or heater.value: fan.off(); heater.off()
 
-                    # 2. 습도 제어
                     if curr_h < TARGET_HUMID - 5.0:
                         if not humidifier.value: humidifier.on()
                     elif curr_h >= TARGET_HUMID:
                         if humidifier.value: humidifier.off()
             
-            # [수정] 2초 -> 5초로 늘려서 CPU 여유 확보 (음성인식 간섭 줄임)
-            time.sleep(5)
-            
+            time.sleep(2)
         except Exception as e:
             print(f"Auto Loop Error: {e}")
-            time.sleep(5)
+            time.sleep(2)
 
-# --- [6. 음성 인식 로직 (스레드 2) - 디버깅 및 안정화] ---
-def voice_loop():
-    while True:
-        try:
-            r = sr.Recognizer()
-            mic = sr.Microphone()
-            
-            # [추가] 주변 소음에 맞춰 마이크 감도 자동 조절
-            r.dynamic_energy_threshold = True 
-            
-            print("🎤 마이크 연결 시도 중...")
-            with mic as source:
-                r.adjust_for_ambient_noise(source, duration=1)
-                print("🎤 음성 인식 준비 완료! (명령을 기다립니다...)")
-                
-                while True:
-                    try:
-                        # [디버깅] 현재 상태 출력
-                        print("👂 듣는 중...") 
-                        
-                        # timeout=None: 말할 때까지 무한 대기 (CPU 낭비 방지)
-                        # phrase_time_limit=3: 말 시작하면 3초까지만 듣기
-                        audio = r.listen(source, timeout=None, phrase_time_limit=3)
-                        
-                        print("Processing... (구글 서버 전송 중)")
-                        text = r.recognize_google(audio, language='ko-KR')
-                        print(f"🗣️ 인식된 명령: {text}")
-                        process_voice_command(text)
-                        
-                    except sr.WaitTimeoutError:
-                        pass 
-                    except sr.UnknownValueError:
-                        print("❌ 발음 불명확 (다시 말해주세요)")
-                    except OSError as e:
-                        print(f"⚠️ 마이크 장치 오류! 재연결합니다... ({e})")
-                        break 
-                    except Exception as e:
-                        print(f"⚠️ 기타 에러: {e}")
-                        if "Stream closed" in str(e): break
-
-        except Exception as e:
-            print(f"🔥 마이크 치명적 오류 (3초 후 재시도): {e}")
-            time.sleep(3)
-
-def process_voice_command(text):
-    text = text.replace(" ", "")
-    
-    # 1. 전등
-    if "전등" in text or "불" in text:
-        if "켜" in text: lamp.on()
-        elif "꺼" in text: lamp.off()
-
-    # 2. 에어컨
-    elif "에어컨" in text:
-        current_data["mode"] = "MANUAL"
-        if "켜" in text: fan.on(); heater.off()
-        elif "꺼" in text: fan.off()
-
-    # 3. 난방기
-    elif "난방" in text or "히터" in text:
-        current_data["mode"] = "MANUAL"
-        if "켜" in text: heater.on(); fan.off()
-        elif "꺼" in text: heater.off()
-
-    # 4. 가습기
-    elif "가습" in text:
-        current_data["mode"] = "MANUAL"
-        if "켜" in text: humidifier.on()
-        elif "꺼" in text: humidifier.off()
-            
-    # 5. 모드
-    elif "자동" in text and "모드" in text:
-        current_data["mode"] = "AUTO"
-    elif "수동" in text and "모드" in text:
-        current_data["mode"] = "MANUAL"
-
-# --- [7. 웹 서버] ---
+# --- [웹 서버] ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -193,28 +203,31 @@ def status():
 @app.route('/control', methods=['POST'])
 def control():
     action = request.form.get('action')
-    
     if action == "auto_toggle":
         current_data["mode"] = "MANUAL" if current_data["mode"] == "AUTO" else "AUTO"
         fan.off(); heater.off(); humidifier.off()
-    
-    elif action == "lamp_toggle":
-        lamp.toggle()
-
+    elif action == "lamp_toggle": lamp.toggle()
     elif current_data["mode"] == "MANUAL":
         if action == "fan_toggle": fan.toggle()
         elif action == "heater_toggle": heater.toggle()
         elif action == "humidifier_toggle": humidifier.toggle()
-            
     return "OK"
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    user_msg = request.form.get('msg')
+    
+    # 1. Gemini에게 물어보기
+    ai_data = ask_gemini(user_msg)
+    
+    # 2. 답변에 따라 기기 제어하기
+    final_response = process_ai_command(ai_data)
+    
+    return jsonify({"response": final_response})
 
 if __name__ == '__main__':
     t_auto = threading.Thread(target=automation_loop)
     t_auto.daemon = True
     t_auto.start()
-
-    t_voice = threading.Thread(target=voice_loop)
-    t_voice.daemon = True
-    t_voice.start()
 
     app.run(host='0.0.0.0', port=5000, debug=False)

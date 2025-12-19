@@ -3,105 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스마트홈 1조 Control Panel</title>
+    <title>스마트홈 제어</title>
     <style>
         body { font-family: 'Pretendard', sans-serif; text-align: center; background: #eef2f3; margin: 0; padding: 20px; }
-        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 800px; margin: 0 auto; }
+        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 900px; margin: 0 auto; }
         
-        .card { background: white; padding: 20px; width: 100%; max-width: 320px; border-radius: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
-        h2 { margin: 0 0 20px 0; color: #333; font-size: 22px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
+        /* 카드 스타일 */
+        .card { background: white; padding: 20px; width: 100%; max-width: 350px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        h2 { margin: 0 0 15px 0; color: #333; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
         
-        .env-box { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        /* 온습도 */
+        .env-box { display: flex; justify-content: space-around; margin-bottom: 15px; }
         .data-val { font-size: 32px; font-weight: bold; color: #2c3e50; }
         .label { font-size: 14px; color: #7f8c8d; display: block; }
-        
-        .btn { width: 100%; padding: 15px; margin: 5px 0; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: space-between; }
-        .btn:active { transform: scale(0.98); }
-        
-        .btn-main { background: #3498db; color: white; }
+
+        /* 버튼 */
+        .btn { width: 100%; padding: 12px; margin: 5px 0; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+        .btn-main { background: #3498db; color: white; justify-content: center; }
         .btn-device { background: #f8f9fa; color: #333; border: 1px solid #ddd; }
-        
-        /* 상태별 색상 */
-        .active-blue { background: #e3f2fd; color: #2196F3; border-color: #2196F3; } /* 에어컨 */
-        .active-red { background: #ffebee; color: #f44336; border-color: #f44336; }  /* 히터 */
-        .active-yellow { background: #fffde7; color: #fbc02d; border-color: #fbc02d; } /* 전등 */
-        .active-green { background: #e8f5e9; color: #4caf50; border-color: #4caf50; } /* 가습기 */
-        
+        .active-blue { background: #e3f2fd; color: #2196F3; border-color: #2196F3; }
+        .active-red { background: #ffebee; color: #f44336; border-color: #f44336; }
+        .active-yellow { background: #fffde7; color: #fbc02d; border-color: #fbc02d; }
+        .active-green { background: #e8f5e9; color: #4caf50; border-color: #4caf50; }
         .disabled { opacity: 0.5; pointer-events: none; }
+
+        /* --- [채팅창 스타일] --- */
+        .chat-container { width: 100%; max-width: 350px; background: white; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; height: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .chat-header { background: #34495e; color: white; padding: 15px; font-weight: bold; text-align: left; }
+        .chat-messages { flex: 1; padding: 15px; overflow-y: auto; background: #f1f2f6; display: flex; flex-direction: column; gap: 10px; }
+        
+        .msg { max-width: 80%; padding: 10px 15px; border-radius: 15px; font-size: 14px; line-height: 1.4; position: relative; word-wrap: break-word; }
+        .msg-bot { align-self: flex-start; background: white; color: #333; border-bottom-left-radius: 2px; border: 1px solid #ddd; }
+        .msg-user { align-self: flex-end; background: #3498db; color: white; border-bottom-right-radius: 2px; }
+        
+        .chat-input-area { display: flex; padding: 10px; background: white; border-top: 1px solid #eee; }
+        #chat-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
+        #chat-send { margin-left: 10px; padding: 10px 20px; background: #34495e; color: white; border: none; border-radius: 20px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1 style="color:#2c3e50;">🏠 1조 스마트홈 시스템</h1>
+    <h1 style="color:#2c3e50; margin-bottom: 10px;">라즈베리파이 스마트홈 제어</h1>
 
     <div class="container">
         <div class="card">
-            <h2>🌡️ 실내 환경</h2>
+            <h2>📊 상태 & 제어</h2>
             <div class="env-box">
-                <div>
-                    <span class="label">온도</span>
-                    <span class="data-val" id="temp">--</span>°C
-                </div>
-                <div>
-                    <span class="label">습도</span>
-                    <span class="data-val" id="humid">--</span>%
-                </div>
+                <div><span class="label">온도</span><span class="data-val" id="temp">--</span>°C</div>
+                <div><span class="label">습도</span><span class="data-val" id="humid">--</span>%</div>
             </div>
-            <div style="text-align: left; background: #fafafa; padding: 10px; border-radius: 10px;">
+            
+            <div style="background: #fafafa; padding: 10px; border-radius: 10px; margin-bottom: 10px;">
                 <span class="label">현재 모드</span>
                 <strong id="mode_text" style="font-size: 18px; color: #2ecc71;">AUTO</strong>
             </div>
-            <button class="btn btn-main" style="margin-top: 15px;" onclick="sendControl('auto_toggle')">
-                🔄 자동/수동 모드 전환
-            </button>
+
+            <button class="btn btn-main" onclick="sendControl('auto_toggle')">🔄 자동/수동 전환</button>
+            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+            
+            <button id="btn-lamp" class="btn btn-device" onclick="sendControl('lamp_toggle')"><span>💡 전등</span><span id="lamp-status">OFF</span></button>
+            
+            <div id="hvac-controls">
+                <button id="btn-fan" class="btn btn-device" onclick="sendControl('fan_toggle')"><span>❄️ 에어컨</span><span id="fan-status">OFF</span></button>
+                <button id="btn-heater" class="btn btn-device" onclick="sendControl('heater_toggle')"><span>♨️ 난방기</span><span id="heater-status">OFF</span></button>
+                <button id="btn-humid" class="btn btn-device" onclick="sendControl('humidifier_toggle')"><span>💧 가습기</span><span id="humidifier-status">OFF</span></button>
+            </div>
         </div>
 
-        <div class="card">
-            <h2>💡 기기 제어</h2>
-            
-            <button id="btn-lamp" class="btn btn-device" onclick="sendControl('lamp_toggle')">
-                <span>💡 거실 전등</span> <span id="lamp-status">OFF</span>
-            </button>
-            
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
-
-            <div id="hvac-controls">
-                <button id="btn-fan" class="btn btn-device" onclick="sendControl('fan_toggle')">
-                    <span>❄️ 에어컨</span> <span id="fan-status">OFF</span>
-                </button>
-                
-                <button id="btn-heater" class="btn btn-device" onclick="sendControl('heater_toggle')">
-                    <span>♨️ 난방기</span> <span id="heater-status">OFF</span>
-                </button>
-
-                <button id="btn-humid" class="btn btn-device" onclick="sendControl('humidifier_toggle')">
-                    <span>💧 가습기</span> <span id="humidifier-status">OFF</span>
-                </button>
+        <div class="chat-container">
+            <div class="chat-header">AI 봇</div>
+            <div class="chat-messages" id="chat-box">
+                <div class="msg msg-bot">안녕하세요! AI 비서입니다. 🤖<br>명령을 내려주시거나 대화를 걸어보세요!</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="예: 방이 너무 덥네..." onkeypress="handleEnter(event)">
+                <button id="chat-send" onclick="sendMessage()">전송</button>
             </div>
         </div>
     </div>
 
     <script>
+        // --- 1. 상태 업데이트 (1초마다) ---
         function updateUI() {
             fetch('/status').then(res => res.json()).then(data => {
-                // 1. 온습도
                 document.getElementById('temp').innerText = data.temp;
                 document.getElementById('humid').innerText = data.humid;
                 
-                // 2. 모드 UI
                 const modeText = document.getElementById('mode_text');
                 const hvacDiv = document.getElementById('hvac-controls');
                 
                 if(data.mode === "AUTO") {
                     modeText.innerText = "🤖 자동 제어 중";
                     modeText.style.color = "#2ecc71";
-                    hvacDiv.classList.add('disabled'); // 버튼 잠금
+                    hvacDiv.classList.add('disabled');
                 } else {
                     modeText.innerText = "✋ 수동 제어 중";
                     modeText.style.color = "#f39c12";
-                    hvacDiv.classList.remove('disabled'); // 버튼 풀림
+                    hvacDiv.classList.remove('disabled');
                 }
 
-                // 3. 버튼 상태 업데이트
                 setBtnState('btn-lamp', 'lamp-status', data.lamp, 'active-yellow');
                 setBtnState('btn-fan', 'fan-status', data.fan, 'active-blue');
                 setBtnState('btn-heater', 'heater-status', data.heater, 'active-red');
@@ -112,14 +111,8 @@
         function setBtnState(btnId, textId, isActive, activeClass) {
             const btn = document.getElementById(btnId);
             const txt = document.getElementById(textId);
-            
-            if(isActive) {
-                btn.classList.add(activeClass);
-                txt.innerText = "ON";
-            } else {
-                btn.classList.remove(activeClass);
-                txt.innerText = "OFF";
-            }
+            if(isActive) { btn.classList.add(activeClass); txt.innerText = "ON"; }
+            else { btn.classList.remove(activeClass); txt.innerText = "OFF"; }
         }
 
         function sendControl(act) {
@@ -128,9 +121,47 @@
             fetch('/control', { method: 'POST', body: form }).then(updateUI);
         }
 
-        // [중요 수정] 서버 부하를 줄이기 위해 갱신 주기를 1초 -> 3초로 변경
-        setInterval(updateUI, 3000); 
+        setInterval(updateUI, 1000);
         updateUI();
+
+        // --- 2. 채팅 기능 ---
+        function handleEnter(e) { if(e.key === 'Enter') sendMessage(); }
+
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const msg = input.value.trim();
+            if(msg === "") return;
+
+            // 내 메시지 화면에 추가
+            addMessage(msg, 'user');
+            input.value = "";
+            input.focus(); // 입력창 포커스 유지
+
+            // 서버로 전송
+            const form = new FormData();
+            form.append('msg', msg);
+            
+            fetch('/chat', { method: 'POST', body: form })
+                .then(res => res.json())
+                .then(data => {
+                    // 봇 응답 화면에 추가
+                    addMessage(data.response, 'bot');
+                    // 응답 받으면 상태도 즉시 갱신 (반응성 향상)
+                    updateUI();
+                })
+                .catch(err => {
+                    addMessage("서버 연결에 실패했습니다.", 'bot');
+                });
+        }
+
+        function addMessage(text, sender) {
+            const chatBox = document.getElementById('chat-box');
+            const div = document.createElement('div');
+            div.className = `msg msg-${sender}`;
+            div.innerHTML = text.replace(/\n/g, "<br>"); // 줄바꿈 처리
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight; // 스크롤 맨 아래로
+        }
     </script>
 </body>
 </html>
