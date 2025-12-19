@@ -7,21 +7,13 @@ from flask import Flask, render_template, jsonify, request
 from gpiozero import OutputDevice
 import board
 import adafruit_dht
-
-# [NEW] 구글 제미나이 라이브러리
 import google.generativeai as genai
 
-# ========================================================
-# 🔑 [필수] 발급받은 Gemini API 키를 여기에 넣으세요!
-# ========================================================
-API_KEY = "API 키 삽입" 
-# ========================================================
+API_KEY = "API키 삽입"
 
-# Gemini 설정
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash-lite') # 빠르고 가벼운 모델 사용
+model = genai.GenerativeModel('gemini-2.5-flash-lite')
 
-# --- [1. GPIO 정리] ---
 for proc in psutil.process_iter(['pid', 'name']):
     if proc.info['name'] and "libgpiod" in proc.info['name']:
         try:
@@ -29,7 +21,6 @@ for proc in psutil.process_iter(['pid', 'name']):
         except:
             pass
 
-# --- [2. 핀 번호 설정] ---
 DHT_PIN = board.D17
 FAN_PIN = 22
 HEATER_PIN = 27
@@ -39,7 +30,6 @@ HUMIDIFIER_PIN = 23
 TARGET_TEMP = 26.0
 TARGET_HUMID = 50.0
 
-# --- [3. 기기 초기화] ---
 app = Flask(__name__)
 
 fan = OutputDevice(FAN_PIN, active_high=True, initial_value=False)
@@ -54,15 +44,7 @@ except:
 
 current_data = {"temp": 0, "humid": 0, "mode": "AUTO"}
 
-# ==========================================
-# 🧠 [핵심] Gemini에게 제어 명령 받기
-# ==========================================
 def ask_gemini(user_text):
-    """
-    사용자의 말을 Gemini에게 보내고, 제어 명령(JSON)을 받아옵니다.
-    """
-    
-    # 1. 시스템 프롬프트 (가스라이팅)
     system_prompt = f"""
     너는 라즈베리파이 스마트홈 AI 비서야.
     현재 실내 온도는 {current_data['temp']}도, 습도는 {current_data['humid']}%야.
@@ -92,13 +74,10 @@ def ask_gemini(user_text):
     """
 
     try:
-        # 2. Gemini에게 질문
         full_prompt = f"{system_prompt}\n\n사용자: {user_text}"
         response = model.generate_content(full_prompt)
         
-        # 3. 응답 파싱 (Gemini가 가끔 ```json ... ``` 을 붙일 때가 있어서 제거)
         clean_text = response.text.strip()
-        # 마크다운 코드 블록 제거 정규식
         clean_text = re.sub(r"^```json\s*", "", clean_text)
         clean_text = re.sub(r"^```\s*", "", clean_text)
         clean_text = re.sub(r"\s*```$", "", clean_text)
@@ -108,15 +87,13 @@ def ask_gemini(user_text):
 
     except Exception as e:
         print(f"Gemini 오류: {e}")
-        # 오류 발생 시 기본값 리턴
-        return {"action": "NONE", "msg": "죄송해요, AI 서버와 통신이 원활하지 않아요. 😅"}
+        return {"action": "NONE", "msg": "죄송해요, AI 서버와 통신이 원활하지 않아요."}
 
-# --- [제어 로직] ---
 def process_ai_command(ai_data):
     action = ai_data.get("action", "NONE")
     msg = ai_data.get("msg", "")
 
-    print(f"🤖 Gemini 판단: {action} / 답변: {msg}")
+    print(f"Gemini 판단: {action} / 답변: {msg}")
 
     if action == "LAMP_ON": lamp.on()
     elif action == "LAMP_OFF": lamp.off()
@@ -147,9 +124,8 @@ def process_ai_command(ai_data):
 
     return msg
 
-# --- [자동화 루프] ---
 def automation_loop():
-    print("🤖 스마트홈 자동화 시스템 가동 중...")
+    print("스마트홈 자동화 시스템 가동 중...")
     while True:
         try:
             if dht_device:
@@ -183,7 +159,6 @@ def automation_loop():
             print(f"Auto Loop Error: {e}")
             time.sleep(2)
 
-# --- [웹 서버] ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -217,10 +192,8 @@ def control():
 def chat():
     user_msg = request.form.get('msg')
     
-    # 1. Gemini에게 물어보기
     ai_data = ask_gemini(user_msg)
     
-    # 2. 답변에 따라 기기 제어하기
     final_response = process_ai_command(ai_data)
     
     return jsonify({"response": final_response})

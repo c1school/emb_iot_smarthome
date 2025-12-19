@@ -7,17 +7,14 @@
     <style>
         body { font-family: 'Pretendard', sans-serif; text-align: center; background: #eef2f3; margin: 0; padding: 20px; }
         .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 900px; margin: 0 auto; }
-        
-        /* 카드 스타일 */
+
         .card { background: white; padding: 20px; width: 100%; max-width: 350px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
         h2 { margin: 0 0 15px 0; color: #333; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
-        
-        /* 온습도 */
+
         .env-box { display: flex; justify-content: space-around; margin-bottom: 15px; }
         .data-val { font-size: 32px; font-weight: bold; color: #2c3e50; }
         .label { font-size: 14px; color: #7f8c8d; display: block; }
 
-        /* 버튼 */
         .btn { width: 100%; padding: 12px; margin: 5px 0; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
         .btn-main { background: #3498db; color: white; justify-content: center; }
         .btn-device { background: #f8f9fa; color: #333; border: 1px solid #ddd; }
@@ -27,15 +24,14 @@
         .active-green { background: #e8f5e9; color: #4caf50; border-color: #4caf50; }
         .disabled { opacity: 0.5; pointer-events: none; }
 
-        /* --- [채팅창 스타일] --- */
         .chat-container { width: 100%; max-width: 350px; background: white; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; height: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
         .chat-header { background: #34495e; color: white; padding: 15px; font-weight: bold; text-align: left; }
         .chat-messages { flex: 1; padding: 15px; overflow-y: auto; background: #f1f2f6; display: flex; flex-direction: column; gap: 10px; }
-        
+
         .msg { max-width: 80%; padding: 10px 15px; border-radius: 15px; font-size: 14px; line-height: 1.4; position: relative; word-wrap: break-word; }
         .msg-bot { align-self: flex-start; background: white; color: #333; border-bottom-left-radius: 2px; border: 1px solid #ddd; }
         .msg-user { align-self: flex-end; background: #3498db; color: white; border-bottom-right-radius: 2px; }
-        
+
         .chat-input-area { display: flex; padding: 10px; background: white; border-top: 1px solid #eee; }
         #chat-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
         #chat-send { margin-left: 10px; padding: 10px 20px; background: #34495e; color: white; border: none; border-radius: 20px; cursor: pointer; }
@@ -51,7 +47,7 @@
                 <div><span class="label">온도</span><span class="data-val" id="temp">--</span>°C</div>
                 <div><span class="label">습도</span><span class="data-val" id="humid">--</span>%</div>
             </div>
-            
+
             <div style="background: #fafafa; padding: 10px; border-radius: 10px; margin-bottom: 10px;">
                 <span class="label">현재 모드</span>
                 <strong id="mode_text" style="font-size: 18px; color: #2ecc71;">AUTO</strong>
@@ -59,13 +55,21 @@
 
             <button class="btn btn-main" onclick="sendControl('auto_toggle')">🔄 자동/수동 전환</button>
             <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-            
-            <button id="btn-lamp" class="btn btn-device" onclick="sendControl('lamp_toggle')"><span>💡 전등</span><span id="lamp-status">OFF</span></button>
-            
+
+            <button id="btn-lamp" class="btn btn-device" onclick="sendControl('lamp_toggle')">
+                <span>💡 전등</span><span id="lamp-status">OFF</span>
+            </button>
+
             <div id="hvac-controls">
-                <button id="btn-fan" class="btn btn-device" onclick="sendControl('fan_toggle')"><span>❄️ 에어컨</span><span id="fan-status">OFF</span></button>
-                <button id="btn-heater" class="btn btn-device" onclick="sendControl('heater_toggle')"><span>♨️ 난방기</span><span id="heater-status">OFF</span></button>
-                <button id="btn-humid" class="btn btn-device" onclick="sendControl('humidifier_toggle')"><span>💧 가습기</span><span id="humidifier-status">OFF</span></button>
+                <button id="btn-fan" class="btn btn-device" onclick="sendControl('fan_toggle')">
+                    <span>❄️ 에어컨</span><span id="fan-status">OFF</span>
+                </button>
+                <button id="btn-heater" class="btn btn-device" onclick="sendControl('heater_toggle')">
+                    <span>♨️ 난방기</span><span id="heater-status">OFF</span>
+                </button>
+                <button id="btn-humid" class="btn btn-device" onclick="sendControl('humidifier_toggle')">
+                    <span>💧 가습기</span><span id="humidifier-status">OFF</span>
+                </button>
             </div>
         </div>
 
@@ -82,16 +86,15 @@
     </div>
 
     <script>
-        // --- 1. 상태 업데이트 (1초마다) ---
         function updateUI() {
             fetch('/status').then(res => res.json()).then(data => {
                 document.getElementById('temp').innerText = data.temp;
                 document.getElementById('humid').innerText = data.humid;
-                
+
                 const modeText = document.getElementById('mode_text');
                 const hvacDiv = document.getElementById('hvac-controls');
-                
-                if(data.mode === "AUTO") {
+
+                if (data.mode === "AUTO") {
                     modeText.innerText = "🤖 자동 제어 중";
                     modeText.style.color = "#2ecc71";
                     hvacDiv.classList.add('disabled');
@@ -111,8 +114,13 @@
         function setBtnState(btnId, textId, isActive, activeClass) {
             const btn = document.getElementById(btnId);
             const txt = document.getElementById(textId);
-            if(isActive) { btn.classList.add(activeClass); txt.innerText = "ON"; }
-            else { btn.classList.remove(activeClass); txt.innerText = "OFF"; }
+            if (isActive) {
+                btn.classList.add(activeClass);
+                txt.innerText = "ON";
+            } else {
+                btn.classList.remove(activeClass);
+                txt.innerText = "OFF";
+            }
         }
 
         function sendControl(act) {
@@ -124,32 +132,29 @@
         setInterval(updateUI, 1000);
         updateUI();
 
-        // --- 2. 채팅 기능 ---
-        function handleEnter(e) { if(e.key === 'Enter') sendMessage(); }
+        function handleEnter(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
 
         function sendMessage() {
             const input = document.getElementById('chat-input');
             const msg = input.value.trim();
-            if(msg === "") return;
+            if (msg === "") return;
 
-            // 내 메시지 화면에 추가
             addMessage(msg, 'user');
             input.value = "";
-            input.focus(); // 입력창 포커스 유지
+            input.focus();
 
-            // 서버로 전송
             const form = new FormData();
             form.append('msg', msg);
-            
+
             fetch('/chat', { method: 'POST', body: form })
                 .then(res => res.json())
                 .then(data => {
-                    // 봇 응답 화면에 추가
                     addMessage(data.response, 'bot');
-                    // 응답 받으면 상태도 즉시 갱신 (반응성 향상)
                     updateUI();
                 })
-                .catch(err => {
+                .catch(() => {
                     addMessage("서버 연결에 실패했습니다.", 'bot');
                 });
         }
@@ -158,9 +163,9 @@
             const chatBox = document.getElementById('chat-box');
             const div = document.createElement('div');
             div.className = `msg msg-${sender}`;
-            div.innerHTML = text.replace(/\n/g, "<br>"); // 줄바꿈 처리
+            div.innerHTML = text.replace(/\n/g, "<br>");
             chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight; // 스크롤 맨 아래로
+            chatBox.scrollTop = chatBox.scrollHeight;
         }
     </script>
 </body>
