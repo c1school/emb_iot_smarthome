@@ -6,7 +6,9 @@ from gpiozero import OutputDevice
 import board
 import adafruit_dht
 import speech_recognition as sr
-from ctypes import * # --- [1. ALSA 에러 메시지 숨기기] ---
+from ctypes import *
+
+# --- [1. ALSA 에러 메시지 숨기기] ---
 ERROR_HANDLER_FUNC = CFUNCTYPE(None, c_char_p, c_int, c_char_p, c_int, c_char_p)
 def py_error_handler(filename, line, function, err, fmt):
     pass
@@ -27,10 +29,10 @@ DHT_PIN = board.D17       # 온습도 센서
 FAN_PIN = 22              # 에어컨 (파란 LED)
 HEATER_PIN = 27           # 난방기 (빨간 LED)
 LAMP_PIN = 26             # 전등 (노란 LED)
-HUMIDIFIER_PIN = 23       # [NEW] 가습기 (초록 LED 추천)
+HUMIDIFIER_PIN = 23       # 가습기 (초록 LED)
 
 TARGET_TEMP = 26.0        # 희망 온도
-TARGET_HUMID = 50.0       # [NEW] 희망 습도
+TARGET_HUMID = 50.0       # 희망 습도
 
 # --- [4. 기기 초기화] ---
 app = Flask(__name__)
@@ -39,7 +41,7 @@ app = Flask(__name__)
 fan = OutputDevice(FAN_PIN, active_high=True, initial_value=False)
 heater = OutputDevice(HEATER_PIN, active_high=True, initial_value=False)
 lamp = OutputDevice(LAMP_PIN, active_high=True, initial_value=False)
-humidifier = OutputDevice(HUMIDIFIER_PIN, active_high=True, initial_value=False) # [NEW]
+humidifier = OutputDevice(HUMIDIFIER_PIN, active_high=True, initial_value=False)
 
 # 온습도 센서 설정
 try:
@@ -52,7 +54,7 @@ current_data = {
     "temp": 0, "humid": 0, "mode": "AUTO"
 }
 
-# --- [5. 자동화 로직 (스레드 1)] ---
+# --- [5. 자동화 로직 (스레드 1) - 주기 완화] ---
 def automation_loop():
     print("🤖 스마트홈 자동화 시스템 가동 중...")
     while True:
@@ -74,51 +76,69 @@ def automation_loop():
                 curr_h = current_data["humid"]
                 
                 if curr_t != 0: 
-                    # 1. 온도 제어 (에어컨/히터)
-                    if curr_t > TARGET_TEMP + 1.0: # 더울 때
+                    # 1. 온도 제어
+                    if curr_t > TARGET_TEMP + 1.0: 
                         if not fan.value: fan.on(); heater.off()
-                    elif curr_t < TARGET_TEMP - 1.0: # 추울 때
+                    elif curr_t < TARGET_TEMP - 1.0: 
                         if not heater.value: fan.off(); heater.on()
-                    else: # 쾌적
+                    else: 
                         if fan.value or heater.value: fan.off(); heater.off()
 
-                    # 2. 습도 제어 (가습기) [NEW]
-                    # 습도가 목표보다 5% 이상 낮으면(건조하면) 가습기 ON
+                    # 2. 습도 제어
                     if curr_h < TARGET_HUMID - 5.0:
                         if not humidifier.value: humidifier.on()
-                    # 습도가 목표 이상이면 가습기 OFF
                     elif curr_h >= TARGET_HUMID:
                         if humidifier.value: humidifier.off()
             
-            time.sleep(2)
+            # [수정] 2초 -> 5초로 늘려서 CPU 여유 확보 (음성인식 간섭 줄임)
+            time.sleep(5)
+            
         except Exception as e:
             print(f"Auto Loop Error: {e}")
-            time.sleep(1)
+            time.sleep(5)
 
-# --- [6. 음성 인식 로직 (스레드 2)] ---
+# --- [6. 음성 인식 로직 (스레드 2) - 디버깅 및 안정화] ---
 def voice_loop():
     while True:
         try:
             r = sr.Recognizer()
             mic = sr.Microphone()
+            
+            # [추가] 주변 소음에 맞춰 마이크 감도 자동 조절
+            r.dynamic_energy_threshold = True 
+            
             print("🎤 마이크 연결 시도 중...")
             with mic as source:
                 r.adjust_for_ambient_noise(source, duration=1)
-                print("🎤 음성 인식 준비 완료!")
+                print("🎤 음성 인식 준비 완료! (명령을 기다립니다...)")
                 
                 while True:
                     try:
-                        audio = r.listen(source, timeout=5, phrase_time_limit=3)
+                        # [디버깅] 현재 상태 출력
+                        print("👂 듣는 중...") 
+                        
+                        # timeout=None: 말할 때까지 무한 대기 (CPU 낭비 방지)
+                        # phrase_time_limit=3: 말 시작하면 3초까지만 듣기
+                        audio = r.listen(source, timeout=None, phrase_time_limit=3)
+                        
+                        print("Processing... (구글 서버 전송 중)")
                         text = r.recognize_google(audio, language='ko-KR')
                         print(f"🗣️ 인식된 명령: {text}")
                         process_voice_command(text)
-                    except sr.WaitTimeoutError: pass
-                    except sr.UnknownValueError: print("❌ 발음 불명확")
-                    except OSError: break # 재연결 트리거
+                        
+                    except sr.WaitTimeoutError:
+                        pass 
+                    except sr.UnknownValueError:
+                        print("❌ 발음 불명확 (다시 말해주세요)")
+                    except OSError as e:
+                        print(f"⚠️ 마이크 장치 오류! 재연결합니다... ({e})")
+                        break 
                     except Exception as e:
+                        print(f"⚠️ 기타 에러: {e}")
                         if "Stream closed" in str(e): break
 
-        except Exception:
+        except Exception as e:
+            print(f"🔥 마이크 치명적 오류 (3초 후 재시도): {e}")
             time.sleep(3)
 
 def process_voice_command(text):
@@ -141,7 +161,7 @@ def process_voice_command(text):
         if "켜" in text: heater.on(); fan.off()
         elif "꺼" in text: heater.off()
 
-    # 4. 가습기 [NEW]
+    # 4. 가습기
     elif "가습" in text:
         current_data["mode"] = "MANUAL"
         if "켜" in text: humidifier.on()
@@ -166,7 +186,7 @@ def status():
         "fan": fan.value,
         "heater": heater.value,
         "lamp": lamp.value,
-        "humidifier": humidifier.value, # [NEW]
+        "humidifier": humidifier.value,
         "mode": current_data["mode"]
     })
 
@@ -184,7 +204,7 @@ def control():
     elif current_data["mode"] == "MANUAL":
         if action == "fan_toggle": fan.toggle()
         elif action == "heater_toggle": heater.toggle()
-        elif action == "humidifier_toggle": humidifier.toggle() # [NEW]
+        elif action == "humidifier_toggle": humidifier.toggle()
             
     return "OK"
 

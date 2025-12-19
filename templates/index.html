@@ -25,7 +25,7 @@
         .active-blue { background: #e3f2fd; color: #2196F3; border-color: #2196F3; } /* 에어컨 */
         .active-red { background: #ffebee; color: #f44336; border-color: #f44336; }  /* 히터 */
         .active-yellow { background: #fffde7; color: #fbc02d; border-color: #fbc02d; } /* 전등 */
-        .active-green { background: #e8f5e9; color: #4caf50; border-color: #4caf50; } /* 가습기 [NEW] */
+        .active-green { background: #e8f5e9; color: #4caf50; border-color: #4caf50; } /* 가습기 */
         
         .disabled { opacity: 0.5; pointer-events: none; }
     </style>
@@ -105,7 +105,7 @@
                 setBtnState('btn-lamp', 'lamp-status', data.lamp, 'active-yellow');
                 setBtnState('btn-fan', 'fan-status', data.fan, 'active-blue');
                 setBtnState('btn-heater', 'heater-status', data.heater, 'active-red');
-                setBtnState('btn-humid', 'humidifier-status', data.humidifier, 'active-green'); // [NEW]
+                setBtnState('btn-humid', 'humidifier-status', data.humidifier, 'active-green');
             });
         }
 
@@ -128,7 +128,8 @@
             fetch('/control', { method: 'POST', body: form }).then(updateUI);
         }
 
-        setInterval(updateUI, 1000); // 1초마다 갱신
+        // [중요 수정] 서버 부하를 줄이기 위해 갱신 주기를 1초 -> 3초로 변경
+        setInterval(updateUI, 3000); 
         updateUI();
     </script>
 </body>
